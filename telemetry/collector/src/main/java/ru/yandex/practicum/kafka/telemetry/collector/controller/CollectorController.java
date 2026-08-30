@@ -1,59 +1,59 @@
 package ru.yandex.practicum.kafka.telemetry.collector.controller;
 
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
-import org.apache.avro.io.BinaryEncoder;
-import org.apache.avro.io.EncoderFactory;
-import org.apache.avro.specific.SpecificDatumWriter;
-import org.apache.avro.specific.SpecificRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.yandex.practicum.kafka.telemetry.collector.dto.HubEvent;
 import ru.yandex.practicum.kafka.telemetry.collector.dto.SensorEvent;
 import ru.yandex.practicum.kafka.telemetry.collector.mapper.HubEventMapper;
 import ru.yandex.practicum.kafka.telemetry.collector.mapper.SensorEventMapper;
-
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
+import ru.yandex.practicum.kafka.telemetry.collector.util.AvroSerializer;
+import ru.yandex.practicum.kafka.telemetry.event.HubEventAvro;
+import ru.yandex.practicum.kafka.telemetry.event.SensorEventAvro;
 
 @RestController
-@RequestMapping("/events")
-@RequiredArgsConstructor
 public class CollectorController {
+
+    private static final Logger log = LoggerFactory.getLogger(CollectorController.class);
+    private static final String HUBS_TOPIC = "telemetry.hubs.v1";
+    private static final String SENSORS_TOPIC = "telemetry.sensors.v1";
 
     private final KafkaTemplate<String, byte[]> kafkaTemplate;
     private final SensorEventMapper sensorEventMapper;
     private final HubEventMapper hubEventMapper;
+    private final AvroSerializer avroSerializer;
 
-    private static final String SENSORS_TOPIC = "telemetry.sensors.v1";
-    private static final String HUBS_TOPIC = "telemetry.hubs.v1";
+    public CollectorController(KafkaTemplate<String, byte[]> kafkaTemplate,
+                               SensorEventMapper sensorEventMapper,
+                               HubEventMapper hubEventMapper,
+                               AvroSerializer avroSerializer) {
+        this.kafkaTemplate = kafkaTemplate;
+        this.sensorEventMapper = sensorEventMapper;
+        this.hubEventMapper = hubEventMapper;
+        this.avroSerializer = avroSerializer;
+    }
 
-    @PostMapping("/sensors")
-    public ResponseEntity<Void> collectSensorEvent(@Valid @RequestBody SensorEvent event) throws IOException {
-        SpecificRecord avroEvent = sensorEventMapper.toAvro(event);
-        byte[] data = serializeAvro(avroEvent);
-        kafkaTemplate.send(SENSORS_TOPIC, event.getHubId(), data);
+    @PostMapping("/events/sensors")
+    public ResponseEntity<Void> handleSensorEvent(@RequestBody SensorEvent event) {
+        log.debug("Received sensor event: {}", event);
+        SensorEventAvro avroEvent = sensorEventMapper.toAvro(event);
+        byte[] avroBytes = avroSerializer.serialize(avroEvent);
+        kafkaTemplate.send(SENSORS_TOPIC, event.getHubId(), avroBytes);
+        log.info("Sensor event sent to Kafka: id={}, hubId={}", event.getId(), event.getHubId());
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping("/hubs")
-    public ResponseEntity<Void> collectHubEvent(@Valid @RequestBody HubEvent event) throws IOException {
-        SpecificRecord avroEvent = hubEventMapper.toAvro(event);
-        byte[] data = serializeAvro(avroEvent);
-        kafkaTemplate.send(HUBS_TOPIC, event.getHubId(), data);
+    @PostMapping("/events/hubs")
+    public ResponseEntity<Void> handleHubEvent(@RequestBody HubEvent event) {
+        log.debug("Received hub event: {}", event);
+        HubEventAvro avroEvent = hubEventMapper.toAvro(event);
+        byte[] avroBytes = avroSerializer.serialize(avroEvent);
+        kafkaTemplate.send(HUBS_TOPIC, event.getHubId(), avroBytes);
+        log.info("Hub event sent to Kafka: hubId={}", event.getHubId());
         return ResponseEntity.ok().build();
-    }
-
-    private byte[] serializeAvro(SpecificRecord record) throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        BinaryEncoder encoder = EncoderFactory.get().binaryEncoder(out, null);
-        SpecificDatumWriter<SpecificRecord> writer = new SpecificDatumWriter<>(record.getSchema());
-        writer.write(record, encoder);
-        encoder.flush();
-        return out.toByteArray();
     }
 }
