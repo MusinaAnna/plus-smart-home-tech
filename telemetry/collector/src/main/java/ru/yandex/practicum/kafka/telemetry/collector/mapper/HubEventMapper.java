@@ -73,9 +73,14 @@ public class HubEventMapper {
                     throw new IllegalArgumentException("Scenario condition value is not set");
         };
 
+        ConditionTypeAvro type = switch (condition.getType()) {
+            case CO2LEVEL -> ConditionTypeAvro.CO2_LEVEL;
+            default -> ConditionTypeAvro.valueOf(condition.getType().name());
+        };
+
         return ScenarioConditionAvro.newBuilder()
                 .setSensorId(condition.getSensorId())
-                .setType(ConditionTypeAvro.valueOf(condition.getType().name()))
+                .setType(type)
                 .setOperation(ConditionOperationAvro.valueOf(condition.getOperation().name()))
                 .setValue(value)
                 .build();

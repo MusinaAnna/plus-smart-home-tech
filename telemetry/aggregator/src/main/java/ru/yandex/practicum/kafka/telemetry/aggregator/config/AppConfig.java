@@ -2,21 +2,34 @@ package ru.yandex.practicum.kafka.telemetry.aggregator.config;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import ru.yandex.practicum.kafka.telemetry.event.SensorEventAvro;
 import ru.yandex.practicum.kafka.telemetry.event.util.AvroSerializer;
 import ru.yandex.practicum.kafka.telemetry.event.util.SensorEventDeserializer;
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.common.serialization.ByteArraySerializer;
-import org.apache.kafka.common.serialization.StringSerializer;
 
 import java.util.Properties;
 
 @Configuration
 public class AppConfig {
+
+    @Value("${aggregator.kafka.bootstrap-servers}")
+    private String bootstrapServers;
+
+    @Value("${aggregator.kafka.consumer.group-id}")
+    private String groupId;
+
+    @Value("${aggregator.kafka.consumer.enable-auto-commit}")
+    private boolean enableAutoCommit;
+
+    @Value("${aggregator.kafka.producer.acks}")
+    private String acks;
 
     @Bean
     public AvroSerializer avroSerializer() {
@@ -29,11 +42,11 @@ public class AppConfig {
 
         properties.put(
                 ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
-                "localhost:9092"
+                bootstrapServers
         );
         properties.put(
                 ConsumerConfig.GROUP_ID_CONFIG,
-                "aggregator"
+                groupId
         );
         properties.put(
                 ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
@@ -45,7 +58,7 @@ public class AppConfig {
         );
         properties.put(
                 ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG,
-                false
+                enableAutoCommit
         );
 
         return new KafkaConsumer<>(properties);
@@ -57,7 +70,7 @@ public class AppConfig {
 
         properties.put(
                 ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
-                "localhost:9092"
+                bootstrapServers
         );
         properties.put(
                 ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
@@ -69,7 +82,7 @@ public class AppConfig {
         );
         properties.put(
                 ProducerConfig.ACKS_CONFIG,
-                "all"
+                acks
         );
 
         return new KafkaProducer<>(properties);
