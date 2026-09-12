@@ -8,6 +8,7 @@ import org.apache.kafka.common.errors.WakeupException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import ru.yandex.practicum.kafka.telemetry.analyzer.model.Action;
 import ru.yandex.practicum.kafka.telemetry.analyzer.model.Condition;
 import ru.yandex.practicum.kafka.telemetry.analyzer.model.Scenario;
 import ru.yandex.practicum.kafka.telemetry.analyzer.model.Sensor;
@@ -15,16 +16,16 @@ import ru.yandex.practicum.kafka.telemetry.analyzer.repository.ActionRepository;
 import ru.yandex.practicum.kafka.telemetry.analyzer.repository.ConditionRepository;
 import ru.yandex.practicum.kafka.telemetry.analyzer.repository.ScenarioRepository;
 import ru.yandex.practicum.kafka.telemetry.analyzer.repository.SensorRepository;
+import ru.yandex.practicum.kafka.telemetry.event.DeviceActionAvro;
 import ru.yandex.practicum.kafka.telemetry.event.DeviceAddedEventAvro;
 import ru.yandex.practicum.kafka.telemetry.event.DeviceRemovedEventAvro;
 import ru.yandex.practicum.kafka.telemetry.event.HubEventAvro;
 import ru.yandex.practicum.kafka.telemetry.event.ScenarioAddedEventAvro;
 import ru.yandex.practicum.kafka.telemetry.event.ScenarioConditionAvro;
 import ru.yandex.practicum.kafka.telemetry.event.ScenarioRemovedEventAvro;
-import ru.yandex.practicum.kafka.telemetry.analyzer.model.Action;
-import ru.yandex.practicum.kafka.telemetry.event.DeviceActionAvro;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
@@ -95,7 +96,7 @@ public class HubEventProcessor implements Runnable {
         } else if (payload instanceof DeviceRemovedEventAvro deviceRemovedEvent) {
             sensorRepository
                     .findByIdAndHubId(deviceRemovedEvent.getId(), event.getHubId())
-                    .ifPresent(sensorRepository::delete);
+                    .ifPresent(sensor -> removeSensor(sensor, event.getHubId()));
 
         } else if (payload instanceof ScenarioAddedEventAvro scenarioAddedEvent) {
             Scenario scenario = scenarioRepository
@@ -110,7 +111,7 @@ public class HubEventProcessor implements Runnable {
                             )
                     );
 
-            scenario.getConditions().clear();
+            clearScenarioData(scenario);
 
             for (ScenarioConditionAvro conditionAvro : scenarioAddedEvent.getConditions()) {
                 Sensor sensor = sensorRepository
@@ -136,8 +137,6 @@ public class HubEventProcessor implements Runnable {
                 scenario.getConditions().put(sensor, condition);
             }
 
-            scenario.getActions().clear();
-
             for (DeviceActionAvro actionAvro : scenarioAddedEvent.getActions()) {
                 Sensor sensor = sensorRepository
                         .findByIdAndHubId(actionAvro.getSensorId(), event.getHubId())
@@ -158,7 +157,89 @@ public class HubEventProcessor implements Runnable {
         } else if (payload instanceof ScenarioRemovedEventAvro scenarioRemovedEvent) {
             scenarioRepository
                     .findByHubIdAndName(event.getHubId(), scenarioRemovedEvent.getName())
-                    .ifPresent(scenarioRepository::delete);
+                    .ifPresent(this::removeScenario);
         }
+    }
+
+    private void clearScenarioData(Scenario scenario) {
+        if (scenario.getId() == null) {
+            return;
+        }
+
+        List<Condition> oldConditions =
+                new ArrayList<>(scenario.getConditions().values());
+
+        List<Action> oldActions =
+                new ArrayList<>(scenario.getActions().values());
+
+        scenario.getConditions().clear();
+        scenario.getActions().clear();
+
+        scenarioRepository.save(scenario);
+
+        conditionRepository.deleteAll(oldConditions);
+        actionRepository.deleteAll(oldActions);
+    }
+
+    private void removeScenario(Scenario scenario) {
+        List<Condition> conditions =
+                new ArrayList<>(scenario.getConditions().values());
+
+        List<Action> actions =
+                new ArrayList<>(scenario.getActions().values());
+
+        scenario.getConditions().clear();
+        scenario.getActions().clear();
+
+        scenarioRepository.save(scenario);
+        scenarioRepository.delete(scenario);
+
+        conditionRepository.deleteAll(conditions);
+        actionRepository.deleteAll(actions);
+    }
+
+    private void removeSensor(Sensor sensor, String hubId) {
+        List<Scenario> scenarios = scenarioRepository.findByHubId(hubId);
+
+        for (Scenario scenario : scenarios) {
+            Sensor conditionSensor = scenario.getConditions()
+                    .keySet()
+                    .stream()
+                    .filter(item -> item.getId().equals(sensor.getId()))
+                    .findFirst()
+                    .orElse(null);
+
+            Sensor actionSensor = scenario.getActions()
+                    .keySet()
+                    .stream()
+                    .filter(item -> item.getId().equals(sensor.getId()))
+                    .findFirst()
+                    .orElse(null);
+
+            Condition condition = null;
+            Action action = null;
+
+            if (conditionSensor != null) {
+                condition = scenario.getConditions().remove(conditionSensor);
+            }
+
+            if (actionSensor != null) {
+                action = scenario.getActions().remove(actionSensor);
+            }
+
+            if (condition != null || action != null) {
+                scenarioRepository.save(scenario);
+
+                if (condition != null) {
+                    conditionRepository.delete(condition);
+                }
+
+                if (action != null) {
+                    actionRepository.delete(action);
+                }
+            }
+        }
+
+        sensorRepository.delete(sensor);
     }
 }

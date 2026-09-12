@@ -8,6 +8,10 @@ spring:
     hibernate:
       ddl-auto: none
 
+  sql:
+    init:
+      mode: always
+
 grpc:
   client:
     hub-router:
@@ -23,7 +27,9 @@ analyzer:
     hub-consumer:
       group-id: analyzer-hub
       topic: telemetry.hubs.v1
+      enable-auto-commit: false
 
     snapshot-consumer:
       group-id: analyzer-snapshot
       topic: telemetry.snapshots.v1
+      enable-auto-commit: false

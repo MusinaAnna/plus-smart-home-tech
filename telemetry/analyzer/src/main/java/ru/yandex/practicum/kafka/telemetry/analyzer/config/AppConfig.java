@@ -25,6 +25,12 @@ public class AppConfig {
     @Value("${analyzer.kafka.snapshot-consumer.group-id}")
     private String snapshotGroupId;
 
+    @Value("${analyzer.kafka.hub-consumer.enable-auto-commit}")
+    private boolean hubEnableAutoCommit;
+
+    @Value("${analyzer.kafka.snapshot-consumer.enable-auto-commit}")
+    private boolean snapshotEnableAutoCommit;
+
     @Bean
     public KafkaConsumer<String, HubEventAvro> hubEventConsumer() {
         Properties properties = new Properties();
@@ -47,7 +53,7 @@ public class AppConfig {
         );
         properties.put(
                 ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG,
-                false
+                hubEnableAutoCommit
         );
 
         return new KafkaConsumer<>(properties);
@@ -75,7 +81,7 @@ public class AppConfig {
         );
         properties.put(
                 ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG,
-                false
+                snapshotEnableAutoCommit
         );
 
         return new KafkaConsumer<>(properties);
