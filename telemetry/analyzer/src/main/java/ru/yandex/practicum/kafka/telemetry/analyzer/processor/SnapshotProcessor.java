@@ -8,15 +8,9 @@ import org.apache.kafka.common.errors.WakeupException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import ru.yandex.practicum.kafka.telemetry.event.SensorsSnapshotAvro;
+import ru.yandex.practicum.kafka.telemetry.event.*;
 import ru.yandex.practicum.kafka.telemetry.analyzer.repository.ScenarioRepository;
 import ru.yandex.practicum.kafka.telemetry.analyzer.model.Condition;
-import ru.yandex.practicum.kafka.telemetry.event.ClimateSensorAvro;
-import ru.yandex.practicum.kafka.telemetry.event.LightSensorAvro;
-import ru.yandex.practicum.kafka.telemetry.event.MotionSensorAvro;
-import ru.yandex.practicum.kafka.telemetry.event.SensorStateAvro;
-import ru.yandex.practicum.kafka.telemetry.event.SwitchSensorAvro;
-import ru.yandex.practicum.kafka.telemetry.event.TemperatureSensorAvro;
 import ru.yandex.practicum.kafka.telemetry.analyzer.model.Scenario;
 import ru.yandex.practicum.kafka.telemetry.analyzer.model.Sensor;
 import net.devh.boot.grpc.client.inject.GrpcClient;
@@ -62,11 +56,13 @@ public class SnapshotProcessor {
                 ConsumerRecords<String, SensorsSnapshotAvro> records =
                         consumer.poll(Duration.ofSeconds(1));
 
-                for (ConsumerRecord<String, SensorsSnapshotAvro> record : records) {
-                    processSnapshot(record.value());
-                }
+                if (!records.isEmpty()) {
+                    for (ConsumerRecord<String, SensorsSnapshotAvro> record : records) {
+                        processSnapshot(record.value());
+                    }
 
-                consumer.commitSync();
+                    consumer.commitSync();
+                }
             }
         } catch (WakeupException ignored) {
             // Завершаем работу

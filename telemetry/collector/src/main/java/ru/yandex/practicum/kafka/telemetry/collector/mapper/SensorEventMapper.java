@@ -1,17 +1,16 @@
 package ru.yandex.practicum.kafka.telemetry.collector.mapper;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import ru.yandex.practicum.grpc.telemetry.event.SensorEventProto;
 import ru.yandex.practicum.kafka.telemetry.event.*;
 
 import java.time.Instant;
 
+@Slf4j
 @Component
 public class SensorEventMapper {
 
-    private static final Logger log = LoggerFactory.getLogger(SensorEventMapper.class);
 
     public SensorEventAvro toAvro(SensorEventProto event) {
         log.debug("Mapping SensorEventProto: {}", event.getPayloadCase());

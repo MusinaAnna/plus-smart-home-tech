@@ -26,7 +26,7 @@ public class Scenario {
 
     private String name;
 
-    @ManyToMany(fetch = FetchType.EAGER)
+    @ManyToMany
     @JoinTable(
             name = "scenario_conditions",
             joinColumns = @JoinColumn(name = "scenario_id"),
@@ -35,7 +35,7 @@ public class Scenario {
     @MapKeyJoinColumn(name = "sensor_id")
     private Map<Sensor, Condition> conditions = new HashMap<>();
 
-    @ManyToMany(fetch = FetchType.EAGER)
+    @ManyToMany
     @JoinTable(
             name = "scenario_actions",
             joinColumns = @JoinColumn(name = "scenario_id"),

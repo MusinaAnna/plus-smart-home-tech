@@ -51,13 +51,24 @@ public class KafkaEventProducer implements AutoCloseable {
 
         try {
             Future<RecordMetadata> future = producer.send(record);
-            producer.flush();
             RecordMetadata metadata = future.get();
+
             log.info("Событие {} сохранено в топик {} (партиция {}, смещение {})",
                     eventClass, metadata.topic(), metadata.partition(), metadata.offset());
-        } catch (InterruptedException | ExecutionException e) {
-            log.error("Не удалось отправить событие {} в топик {}", eventClass, topic, e);
+
+        } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+
+            log.error("Отправка события {} в топик {} была прервана",
+                    eventClass, topic, e);
+
+            throw new IllegalStateException("Отправка события в Kafka была прервана", e);
+
+        } catch (ExecutionException e) {
+            log.error("Не удалось отправить событие {} в топик {}",
+                    eventClass, topic, e);
+
+            throw new IllegalStateException("Не удалось отправить событие в Kafka", e);
         }
     }
 

@@ -67,11 +67,13 @@ public class HubEventProcessor implements Runnable {
                 ConsumerRecords<String, HubEventAvro> records =
                         consumer.poll(Duration.ofSeconds(1));
 
-                for (ConsumerRecord<String, HubEventAvro> record : records) {
-                    processEvent(record.value());
-                }
+                if (!records.isEmpty()) {
+                    for (ConsumerRecord<String, HubEventAvro> record : records) {
+                        processEvent(record.value());
+                    }
 
-                consumer.commitSync();
+                    consumer.commitSync();
+                }
             }
         } catch (WakeupException ignored) {
             // Завершаем работу

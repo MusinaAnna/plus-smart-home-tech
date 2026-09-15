@@ -44,22 +44,24 @@ public class AggregationStarter {
                 ConsumerRecords<String, SensorEventAvro> records =
                         consumer.poll(Duration.ofSeconds(1));
 
-                for (ConsumerRecord<String, SensorEventAvro> record : records) {
-                    Optional<SensorsSnapshotAvro> snapshot =
-                            aggregator.updateState(record.value());
+                if (!records.isEmpty()) {
+                    for (ConsumerRecord<String, SensorEventAvro> record : records) {
+                        Optional<SensorsSnapshotAvro> snapshot =
+                                aggregator.updateState(record.value());
 
-                    if (snapshot.isPresent()) {
-                        SensorsSnapshotAvro updatedSnapshot = snapshot.get();
+                        if (snapshot.isPresent()) {
+                            SensorsSnapshotAvro updatedSnapshot = snapshot.get();
 
-                        producer.send(new ProducerRecord<>(
-                                snapshotsTopic,
-                                updatedSnapshot.getHubId(),
-                                avroSerializer.serialize(updatedSnapshot)
-                        ));
+                            producer.send(new ProducerRecord<>(
+                                    snapshotsTopic,
+                                    updatedSnapshot.getHubId(),
+                                    avroSerializer.serialize(updatedSnapshot)
+                            ));
+                        }
                     }
-                }
 
-                consumer.commitSync();
+                    consumer.commitSync();
+                }
             }
 
         } catch (WakeupException ignored) {
@@ -67,16 +69,13 @@ public class AggregationStarter {
         } catch (Exception e) {
             log.error("Ошибка во время обработки событий от датчиков", e);
         } finally {
-            try {
-                producer.flush();
-                consumer.commitSync();
-            } finally {
-                log.info("Закрываем консьюмер");
-                consumer.close();
+            producer.flush();
 
-                log.info("Закрываем продюсер");
-                producer.close();
-            }
+            log.info("Закрываем консьюмер");
+            consumer.close();
+
+            log.info("Закрываем продюсер");
+            producer.close();
         }
     }
 }
