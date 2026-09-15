@@ -5,7 +5,7 @@ import org.springframework.context.annotation.Configuration;
 import ru.yandex.practicum.kafka.telemetry.event.util.AvroSerializer;
 
 @Configuration
-public class AppConfig {
+public class AvroConfig {
 
     @Bean
     public AvroSerializer avroSerializer() {
