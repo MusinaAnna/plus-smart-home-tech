@@ -14,7 +14,7 @@ import ru.yandex.practicum.kafka.telemetry.event.util.SensorsSnapshotDeserialize
 import java.util.Properties;
 
 @Configuration
-public class AppConfig {
+public class KafkaConfig {
 
     @Value("${analyzer.kafka.bootstrap-servers}")
     private String bootstrapServers;
