@@ -9,6 +9,7 @@ import ru.yandex.practicum.order.dto.OrderItemDto;
 import ru.yandex.practicum.order.dto.OrderItemRequest;
 import ru.yandex.practicum.order.entity.Order;
 import ru.yandex.practicum.order.entity.OrderItem;
+import ru.yandex.practicum.order.entity.OrderStatus;
 import ru.yandex.practicum.order.exception.NotFoundException;
 import ru.yandex.practicum.order.repository.OrderRepository;
 
@@ -28,7 +29,7 @@ public class OrderService {
         Order order = new Order();
         order.setCustomerName(request.customerName());
         order.setCustomerEmail(request.customerEmail());
-        order.setStatus("CREATED");
+        order.setStatus(OrderStatus.CREATED);
         order.setCreatedAt(LocalDateTime.now());
 
         BigDecimal totalPrice = BigDecimal.ZERO;
@@ -92,7 +93,7 @@ public class OrderService {
                 order.getId(),
                 order.getCustomerName(),
                 order.getCustomerEmail(),
-                order.getStatus(),
+                order.getStatus().name(),
                 order.getTotalPrice(),
                 order.getStatusDetails(),
                 order.getCreatedAt(),

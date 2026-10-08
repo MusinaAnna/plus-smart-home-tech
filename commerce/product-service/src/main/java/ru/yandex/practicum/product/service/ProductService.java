@@ -3,13 +3,13 @@ package ru.yandex.practicum.product.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.yandex.practicum.product.dto.CategoryDto;
 import ru.yandex.practicum.product.dto.CreateProductRequest;
 import ru.yandex.practicum.product.dto.ProductDto;
 import ru.yandex.practicum.product.dto.UpdateProductRequest;
 import ru.yandex.practicum.product.entity.Category;
 import ru.yandex.practicum.product.entity.Product;
 import ru.yandex.practicum.product.exception.NotFoundException;
+import ru.yandex.practicum.product.mapper.ProductMapper;
 import ru.yandex.practicum.product.repository.CategoryRepository;
 import ru.yandex.practicum.product.repository.ProductRepository;
 
@@ -22,6 +22,7 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
+    private final ProductMapper productMapper;
 
     @Transactional
     public ProductDto create(CreateProductRequest request) {
@@ -34,31 +35,31 @@ public class ProductService {
 
         Product savedProduct = productRepository.save(product);
 
-        return toDto(savedProduct);
+        return productMapper.toDto(savedProduct);
     }
 
     public List<ProductDto> findAll() {
         return productRepository.findAllByActiveTrue()
                 .stream()
-                .map(this::toDto)
+                .map(productMapper::toDto)
                 .toList();
     }
 
     public ProductDto findById(Long id) {
-        return toDto(getProduct(id));
+        return productMapper.toDto(getProduct(id));
     }
 
     public List<ProductDto> findByCategory(Long categoryId) {
         return productRepository.findAllByCategoryIdAndActiveTrue(categoryId)
                 .stream()
-                .map(this::toDto)
+                .map(productMapper::toDto)
                 .toList();
     }
 
     public List<ProductDto> search(String query) {
         return productRepository.findAllByNameContainingIgnoreCaseAndActiveTrue(query)
                 .stream()
-                .map(this::toDto)
+                .map(productMapper::toDto)
                 .toList();
     }
 
@@ -90,7 +91,7 @@ public class ProductService {
             product.setActive(request.active());
         }
 
-        return toDto(productRepository.save(product));
+        return productMapper.toDto(productRepository.save(product));
     }
 
     private Product getProduct(Long id) {
@@ -105,29 +106,5 @@ public class ProductService {
 
         return categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new NotFoundException("Категория не найдена"));
-    }
-
-    private ProductDto toDto(Product product) {
-        CategoryDto categoryDto = null;
-
-        if (product.getCategory() != null) {
-            Category category = product.getCategory();
-
-            categoryDto = new CategoryDto(
-                    category.getId(),
-                    category.getName(),
-                    category.getDescription()
-            );
-        }
-
-        return new ProductDto(
-                product.getId(),
-                product.getName(),
-                product.getDescription(),
-                product.getPrice(),
-                categoryDto,
-                product.getImageUrl(),
-                product.isActive()
-        );
     }
 }
