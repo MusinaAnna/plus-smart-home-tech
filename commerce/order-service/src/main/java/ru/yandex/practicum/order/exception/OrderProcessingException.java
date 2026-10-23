@@ -6,4 +6,3 @@ public class OrderProcessingException extends RuntimeException {
         super(message);
     }
 }
-
