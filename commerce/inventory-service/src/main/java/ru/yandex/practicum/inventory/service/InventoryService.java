@@ -35,7 +35,9 @@ public class InventoryService {
     @Transactional
     public InventoryDto create(UpdateInventoryRequest request) {
         if (inventoryRepository.existsByProductId(request.productId())) {
-            throw new IllegalArgumentException("Складская запись для товара уже существует");
+            throw new IllegalArgumentException(
+                    "Складская запись для товара уже существует"
+            );
         }
 
         Inventory inventory = new Inventory();
@@ -66,7 +68,9 @@ public class InventoryService {
         Inventory inventory = getInventory(request.productId());
 
         if (inventory.getAvailableQuantity() < request.quantity()) {
-            throw new InsufficientStockException("Недостаточно товара на складе");
+            throw new InsufficientStockException(
+                    "Недостаточно товара на складе"
+            );
         }
 
         inventory.setReservedQuantity(
@@ -82,9 +86,34 @@ public class InventoryService {
         );
     }
 
+    @Transactional
+    public ReserveResponse release(ReserveRequest request) {
+        Inventory inventory = getInventory(request.productId());
+
+        if (inventory.getReservedQuantity() < request.quantity()) {
+            throw new IllegalArgumentException(
+                    "Нельзя снять больше товара, чем зарезервировано"
+            );
+        }
+
+        inventory.setReservedQuantity(
+                inventory.getReservedQuantity() - request.quantity()
+        );
+
+        Inventory savedInventory = inventoryRepository.save(inventory);
+
+        return new ReserveResponse(
+                true,
+                savedInventory.getAvailableQuantity(),
+                "Резерв успешно снят"
+        );
+    }
+
     private Inventory getInventory(Long productId) {
         return inventoryRepository.findByProductId(productId)
-                .orElseThrow(() -> new NotFoundException("Складская запись не найдена"));
+                .orElseThrow(() ->
+                        new NotFoundException("Складская запись не найдена")
+                );
     }
 
     private InventoryDto toDto(Inventory inventory) {

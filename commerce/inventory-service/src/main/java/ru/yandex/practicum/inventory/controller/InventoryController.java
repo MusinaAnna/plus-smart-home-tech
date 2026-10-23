@@ -38,17 +38,30 @@ public class InventoryController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public InventoryDto create(@Valid @RequestBody UpdateInventoryRequest request) {
+    public InventoryDto create(
+            @Valid @RequestBody UpdateInventoryRequest request
+    ) {
         return inventoryService.create(request);
     }
 
     @PutMapping
-    public InventoryDto update(@Valid @RequestBody UpdateInventoryRequest request) {
+    public InventoryDto update(
+            @Valid @RequestBody UpdateInventoryRequest request
+    ) {
         return inventoryService.update(request);
     }
 
     @PostMapping("/reserve")
-    public ReserveResponse reserve(@Valid @RequestBody ReserveRequest request) {
+    public ReserveResponse reserve(
+            @Valid @RequestBody ReserveRequest request
+    ) {
         return inventoryService.reserve(request);
+    }
+
+    @PostMapping("/release")
+    public ReserveResponse release(
+            @Valid @RequestBody ReserveRequest request
+    ) {
+        return inventoryService.release(request);
     }
 }
