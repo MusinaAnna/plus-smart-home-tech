@@ -7,6 +7,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.errors.WakeupException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -15,8 +16,11 @@ import ru.yandex.practicum.kafka.telemetry.event.SensorsSnapshotAvro;
 import ru.yandex.practicum.kafka.telemetry.event.util.AvroSerializer;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 @Slf4j
 @Component
@@ -45,6 +49,8 @@ public class AggregationStarter {
                         consumer.poll(Duration.ofSeconds(1));
 
                 if (!records.isEmpty()) {
+                    List<Future<RecordMetadata>> confirmations = new ArrayList<>();
+
                     for (ConsumerRecord<String, SensorEventAvro> record : records) {
                         Optional<SensorsSnapshotAvro> snapshot =
                                 aggregator.updateState(record.value());
@@ -52,30 +58,44 @@ public class AggregationStarter {
                         if (snapshot.isPresent()) {
                             SensorsSnapshotAvro updatedSnapshot = snapshot.get();
 
-                            producer.send(new ProducerRecord<>(
+                            confirmations.add(producer.send(new ProducerRecord<>(
                                     snapshotsTopic,
                                     updatedSnapshot.getHubId(),
                                     avroSerializer.serialize(updatedSnapshot)
-                            ));
+                            )));
                         }
+                    }
+
+                    // Подтверждаем входные offset-ы только после успешной отправки всех снимков.
+                    for (Future<RecordMetadata> confirmation : confirmations) {
+                        confirmation.get();
                     }
 
                     consumer.commitSync();
                 }
             }
-
         } catch (WakeupException ignored) {
-            // Завершаем работу в блоке finally
+            // Завершаем работу в блоке finally.
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Ожидание подтверждения отправки снимков прервано", e);
+        } catch (ExecutionException e) {
+            log.error("Не удалось подтвердить отправку снимков в Kafka; offset-ы не сохранены", e);
         } catch (Exception e) {
             log.error("Ошибка во время обработки событий от датчиков", e);
         } finally {
-            producer.flush();
-
-            log.info("Закрываем консьюмер");
-            consumer.close();
-
-            log.info("Закрываем продюсер");
-            producer.close();
+            // Закрываем оба клиента, даже если flush() или consumer.close() завершатся ошибкой.
+            try {
+                producer.flush();
+            } finally {
+                try {
+                    log.info("Закрываем консьюмер");
+                    consumer.close();
+                } finally {
+                    log.info("Закрываем продюсер");
+                    producer.close();
+                }
+            }
         }
     }
 }
