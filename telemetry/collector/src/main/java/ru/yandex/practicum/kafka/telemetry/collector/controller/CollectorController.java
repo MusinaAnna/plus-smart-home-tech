@@ -1,13 +1,14 @@
 package ru.yandex.practicum.kafka.telemetry.collector.controller;
 
+import com.google.protobuf.Empty;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
+import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
-import ru.yandex.practicum.kafka.telemetry.collector.dto.HubEvent;
-import ru.yandex.practicum.kafka.telemetry.collector.dto.SensorEvent;
+import net.devh.boot.grpc.server.service.GrpcService;
+import ru.yandex.practicum.grpc.telemetry.collector.CollectorControllerGrpc;
+import ru.yandex.practicum.grpc.telemetry.event.HubEventProto;
+import ru.yandex.practicum.grpc.telemetry.event.SensorEventProto;
 import ru.yandex.practicum.kafka.telemetry.collector.mapper.HubEventMapper;
 import ru.yandex.practicum.kafka.telemetry.collector.mapper.SensorEventMapper;
 import ru.yandex.practicum.kafka.telemetry.collector.service.KafkaEventProducer;
@@ -16,15 +17,15 @@ import ru.yandex.practicum.kafka.telemetry.event.SensorEventAvro;
 import ru.yandex.practicum.kafka.telemetry.event.util.AvroSerializer;
 
 @Slf4j
-@RestController
-public class CollectorController {
+@GrpcService
+public class CollectorController
+        extends CollectorControllerGrpc.CollectorControllerImplBase {
 
     private final SensorEventMapper sensorEventMapper;
     private final HubEventMapper hubEventMapper;
     private final AvroSerializer avroSerializer;
     private final KafkaEventProducer producer;
 
-    @Autowired
     public CollectorController(SensorEventMapper sensorEventMapper,
                                HubEventMapper hubEventMapper,
                                AvroSerializer avroSerializer,
@@ -35,31 +36,66 @@ public class CollectorController {
         this.producer = producer;
     }
 
-    @PostMapping("/events/sensors")
-    public ResponseEntity<Void> handleSensorEvent(@RequestBody SensorEvent event) {
-        log.info("Received sensor event: {}", event);
+    @Override
+    public void collectSensorEvent(SensorEventProto request,
+                                   StreamObserver<Empty> responseObserver) {
+        try {
+            log.info("Received sensor event: id={}, hubId={}, type={}",
+                    request.getId(),
+                    request.getHubId(),
+                    request.getPayloadCase());
 
-        SensorEventAvro avroEvent = sensorEventMapper.toAvro(event);
+            SensorEventAvro avroEvent = sensorEventMapper.toAvro(request);
+            byte[] avroBytes = avroSerializer.serialize(avroEvent);
 
-        byte[] avroBytes = avroSerializer.serialize(avroEvent);
+            producer.sendSensorEvent(
+                    avroEvent,
+                    request.getHubId(),
+                    avroBytes
+            );
 
-        producer.sendSensorEvent(avroEvent, event.getHubId(), avroBytes);
+            responseObserver.onNext(Empty.getDefaultInstance());
+            responseObserver.onCompleted();
 
-        log.info("Sensor event sent to Kafka: id={}, hubId={}", event.getId(), event.getHubId());
-        return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            log.error("Failed to process sensor event", e);
+
+            responseObserver.onError(new StatusRuntimeException(
+                    Status.INTERNAL
+                            .withDescription(e.getMessage())
+                            .withCause(e)
+            ));
+        }
     }
 
-    @PostMapping("/events/hubs")
-    public ResponseEntity<Void> handleHubEvent(@RequestBody HubEvent event) {
-        log.info("Received hub event: {}", event);
+    @Override
+    public void collectHubEvent(HubEventProto request,
+                                StreamObserver<Empty> responseObserver) {
+        try {
+            log.info("Received hub event: hubId={}, type={}",
+                    request.getHubId(),
+                    request.getPayloadCase());
 
-        HubEventAvro avroEvent = hubEventMapper.toAvro(event);
+            HubEventAvro avroEvent = hubEventMapper.toAvro(request);
+            byte[] avroBytes = avroSerializer.serialize(avroEvent);
 
-        byte[] avroBytes = avroSerializer.serialize(avroEvent);
+            producer.sendHubEvent(
+                    avroEvent,
+                    request.getHubId(),
+                    avroBytes
+            );
 
-        producer.sendHubEvent(avroEvent, event.getHubId(), avroBytes);
+            responseObserver.onNext(Empty.getDefaultInstance());
+            responseObserver.onCompleted();
 
-        log.info("Hub event sent to Kafka: hubId={}", event.getHubId());
-        return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            log.error("Failed to process hub event", e);
+
+            responseObserver.onError(new StatusRuntimeException(
+                    Status.INTERNAL
+                            .withDescription(e.getMessage())
+                            .withCause(e)
+            ));
+        }
     }
 }

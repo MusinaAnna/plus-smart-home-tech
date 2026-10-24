@@ -1,0 +1,12 @@
+server:
+  port: 0
+
+spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5432/order_db
+    username: dbuser
+    password: 12345
+
+  jpa:
+    hibernate:
+      ddl-auto: update
