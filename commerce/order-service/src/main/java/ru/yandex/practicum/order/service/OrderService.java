@@ -34,12 +34,15 @@ public class OrderService {
     @Transactional
     public OrderDto saveOrder(
             CreateOrderRequest request,
-            List<PreparedItem> preparedItems
+            List<PreparedItem> preparedItems,
+            OrderStatus status,
+            String statusDetails
     ) {
         Order order = new Order();
         order.setCustomerName(request.customerName());
         order.setCustomerEmail(request.customerEmail());
-        order.setStatus(OrderStatus.CONFIRMED);
+        order.setStatus(status);
+        order.setStatusDetails(statusDetails);
         order.setCreatedAt(LocalDateTime.now());
 
         BigDecimal totalPrice = BigDecimal.ZERO;

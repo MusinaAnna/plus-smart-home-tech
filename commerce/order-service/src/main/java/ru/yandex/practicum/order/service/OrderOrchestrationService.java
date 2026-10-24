@@ -3,12 +3,12 @@ package ru.yandex.practicum.order.service;
 import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 import ru.yandex.practicum.order.dto.CreateOrderRequest;
 import ru.yandex.practicum.order.dto.OrderDto;
 import ru.yandex.practicum.order.dto.OrderItemRequest;
+import ru.yandex.practicum.order.entity.OrderStatus;
+import ru.yandex.practicum.order.exception.ExternalServiceUnavailableException;
 import ru.yandex.practicum.order.exception.OrderProcessingException;
 import ru.yandex.practicum.order.feign.InventoryClient;
 import ru.yandex.practicum.order.feign.ProductClient;
@@ -30,35 +30,18 @@ public class OrderOrchestrationService {
 
     public OrderDto createOrder(CreateOrderRequest request) {
         Map<Long, Integer> quantities = groupQuantities(request.items());
-
-        Map<Long, ProductClient.ProductDto> products =
-                new LinkedHashMap<>();
-
-        for (Long productId : quantities.keySet()) {
-            products.put(productId, loadProduct(productId));
-        }
-
-        List<OrderService.PreparedItem> items = new ArrayList<>();
-
-        for (OrderItemRequest item : request.items()) {
-            ProductClient.ProductDto product =
-                    products.get(item.productId());
-
-            items.add(new OrderService.PreparedItem(
-                    item.productId(),
-                    product.name(),
-                    item.quantity(),
-                    product.price()
-            ));
-        }
-
-        List<InventoryClient.ReserveRequest> completed =
-                new ArrayList<>();
+        Map<Long, ProductClient.ProductDto> products = new LinkedHashMap<>();
+        List<InventoryClient.ReserveRequest> completed = new ArrayList<>();
 
         try {
-            for (Map.Entry<Long, Integer> entry
-                    : quantities.entrySet()) {
+            for (Long productId : quantities.keySet()) {
+                products.put(productId, loadProduct(productId));
+            }
 
+            List<OrderService.PreparedItem> prepared =
+                    prepareItems(request.items(), products);
+
+            for (Map.Entry<Long, Integer> entry : quantities.entrySet()) {
                 InventoryClient.ReserveRequest reserveRequest =
                         new InventoryClient.ReserveRequest(
                                 entry.getKey(),
@@ -69,11 +52,31 @@ public class OrderOrchestrationService {
                 completed.add(reserveRequest);
             }
 
-            return orderService.saveOrder(request, items);
+            return orderService.saveOrder(
+                    request,
+                    prepared,
+                    OrderStatus.CONFIRMED,
+                    null
+            );
 
-        } catch (RuntimeException exception) {
-            releaseCompleted(completed, exception);
-            throw exception;
+        } catch (ExternalServiceUnavailableException failure) {
+            releaseCompleted(completed, failure);
+
+            log.warn(
+                    "Заказ переведён в ожидание подтверждения: {}",
+                    failure.getMessage()
+            );
+
+            return orderService.saveOrder(
+                    request,
+                    pendingItems(request.items(), products),
+                    OrderStatus.PENDING_CONFIRMATION,
+                    "Требуется ручная проверка: " + failure.getMessage()
+            );
+
+        } catch (RuntimeException failure) {
+            releaseCompleted(completed, failure);
+            throw failure;
         }
     }
 
@@ -112,17 +115,15 @@ public class OrderOrchestrationService {
             );
 
         } catch (FeignException exception) {
-            throw new ResponseStatusException(
-                    HttpStatus.SERVICE_UNAVAILABLE,
-                    "Сервис каталога временно недоступен",
+            throw new ExternalServiceUnavailableException(
+                    "Каталог временно недоступен",
                     exception
             );
         }
 
-        if (product == null
-                || !productId.equals(product.id())) {
-            throw new OrderProcessingException(
-                    "Не удалось получить корректные данные товара id="
+        if (product == null || !productId.equals(product.id())) {
+            throw new ExternalServiceUnavailableException(
+                    "Каталог вернул некорректные данные товара id="
                             + productId
             );
         }
@@ -145,9 +146,57 @@ public class OrderOrchestrationService {
         return product;
     }
 
-    private void reserve(
-            InventoryClient.ReserveRequest request
+    private List<OrderService.PreparedItem> prepareItems(
+            List<OrderItemRequest> items,
+            Map<Long, ProductClient.ProductDto> products
     ) {
+        List<OrderService.PreparedItem> prepared = new ArrayList<>();
+
+        for (OrderItemRequest item : items) {
+            ProductClient.ProductDto product =
+                    products.get(item.productId());
+
+            prepared.add(new OrderService.PreparedItem(
+                    item.productId(),
+                    product.name(),
+                    item.quantity(),
+                    product.price()
+            ));
+        }
+
+        return prepared;
+    }
+
+    private List<OrderService.PreparedItem> pendingItems(
+            List<OrderItemRequest> items,
+            Map<Long, ProductClient.ProductDto> products
+    ) {
+        List<OrderService.PreparedItem> pending = new ArrayList<>();
+
+        for (OrderItemRequest item : items) {
+            ProductClient.ProductDto known =
+                    products.get(item.productId());
+
+            String name = known == null
+                    ? "Товар #" + item.productId() + " (ожидает проверки)"
+                    : known.name();
+
+            BigDecimal price = known == null
+                    ? BigDecimal.ZERO
+                    : known.price();
+
+            pending.add(new OrderService.PreparedItem(
+                    item.productId(),
+                    name,
+                    item.quantity(),
+                    price
+            ));
+        }
+
+        return pending;
+    }
+
+    private void reserve(InventoryClient.ReserveRequest request) {
         InventoryClient.ReserveResponse response;
 
         try {
@@ -168,32 +217,30 @@ public class OrderOrchestrationService {
             );
 
         } catch (FeignException exception) {
-            throw new ResponseStatusException(
-                    HttpStatus.SERVICE_UNAVAILABLE,
-                    "Сервис склада временно недоступен",
+            throw new ExternalServiceUnavailableException(
+                    "Склад временно недоступен",
                     exception
             );
         }
 
         if (response == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.SERVICE_UNAVAILABLE,
-                    "Не получен ответ от сервиса склада"
+            throw new ExternalServiceUnavailableException(
+                    "Склад не подтвердил резервирование"
             );
         }
 
         if (!response.success()) {
             throw new OrderProcessingException(
-                    "Не удалось зарезервировать товар id="
+                    "Недостаточно товара id="
                             + request.productId()
-                            + ": недостаточно товара на складе"
+                            + " на складе"
             );
         }
     }
 
     private void releaseCompleted(
             List<InventoryClient.ReserveRequest> completed,
-            RuntimeException originalException
+            RuntimeException originalFailure
     ) {
         for (int i = completed.size() - 1; i >= 0; i--) {
             InventoryClient.ReserveRequest request = completed.get(i);
@@ -203,26 +250,27 @@ public class OrderOrchestrationService {
                         inventoryClient.releaseStock(request);
 
                 if (response == null || !response.success()) {
-                    IllegalStateException releaseFailure =
+                    IllegalStateException failure =
                             new IllegalStateException(
-                                    "Склад не подтвердил снятие резерва"
+                                    "Склад не подтвердил снятие резерва товара id="
+                                            + request.productId()
                             );
 
-                    originalException.addSuppressed(releaseFailure);
+                    originalFailure.addSuppressed(failure);
 
                     log.error(
-                            "Снятие резерва не подтверждено: productId={}",
+                            "Не подтверждено снятие резерва: productId={}",
                             request.productId()
                     );
                 }
 
-            } catch (RuntimeException releaseException) {
-                originalException.addSuppressed(releaseException);
+            } catch (RuntimeException releaseFailure) {
+                originalFailure.addSuppressed(releaseFailure);
 
                 log.error(
-                        "Ошибка снятия резерва: productId={}",
+                        "Не удалось снять резерв: productId={}",
                         request.productId(),
-                        releaseException
+                        releaseFailure
                 );
             }
         }
