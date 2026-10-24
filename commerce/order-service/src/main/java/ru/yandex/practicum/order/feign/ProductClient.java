@@ -6,7 +6,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 
 import java.math.BigDecimal;
 
-@FeignClient(name = "product-service")
+@FeignClient(
+        name = "product-service",
+        fallbackFactory = ProductClientFallbackFactory.class
+)
 public interface ProductClient {
 
     @GetMapping("/api/products/{id}")
