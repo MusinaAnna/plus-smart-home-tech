@@ -110,3 +110,16 @@ spring:
           uri: lb://order-service
           predicates:
             - Path=/api/orders/**
+
+app:
+  security:
+    users:
+      - username: ivan
+        password: ${GATEWAY_IVAN_PASSWORD:ivan}
+        roles:
+          - USER
+      - username: anna
+        password: ${GATEWAY_ANNA_PASSWORD:anna}
+        roles:
+          - USER
+          - ADMIN
