@@ -6,7 +6,6 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.yandex.practicum.order.dto.CreateOrderRequest;
 import ru.yandex.practicum.order.dto.OrderDto;
 import ru.yandex.practicum.order.dto.OrderItemDto;
-import ru.yandex.practicum.order.dto.OrderItemRequest;
 import ru.yandex.practicum.order.entity.Order;
 import ru.yandex.practicum.order.entity.OrderItem;
 import ru.yandex.practicum.order.entity.OrderStatus;
@@ -24,29 +23,44 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
 
+    public record PreparedItem(
+            Long productId,
+            String productName,
+            Integer quantity,
+            BigDecimal price
+    ) {
+    }
+
     @Transactional
-    public OrderDto create(CreateOrderRequest request) {
+    public OrderDto saveOrder(
+            CreateOrderRequest request,
+            List<PreparedItem> preparedItems,
+            OrderStatus status,
+            String statusDetails
+    ) {
         Order order = new Order();
         order.setCustomerName(request.customerName());
         order.setCustomerEmail(request.customerEmail());
-        order.setStatus(OrderStatus.CREATED);
+        order.setStatus(status);
+        order.setStatusDetails(statusDetails);
         order.setCreatedAt(LocalDateTime.now());
 
         BigDecimal totalPrice = BigDecimal.ZERO;
 
-        for (OrderItemRequest itemRequest : request.items()) {
+        for (PreparedItem prepared : preparedItems) {
             OrderItem item = new OrderItem();
-            item.setProductId(itemRequest.productId());
-            item.setProductName(itemRequest.productName());
-            item.setQuantity(itemRequest.quantity());
-            item.setPrice(itemRequest.price());
+
+            item.setProductId(prepared.productId());
+            item.setProductName(prepared.productName());
+            item.setQuantity(prepared.quantity());
+            item.setPrice(prepared.price());
             item.setOrder(order);
 
             order.getItems().add(item);
 
             totalPrice = totalPrice.add(
-                    itemRequest.price().multiply(
-                            BigDecimal.valueOf(itemRequest.quantity())
+                    prepared.price().multiply(
+                            BigDecimal.valueOf(prepared.quantity())
                     )
             );
         }
@@ -58,7 +72,9 @@ public class OrderService {
 
     public OrderDto findById(Long id) {
         Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Заказ не найден"));
+                .orElseThrow(() ->
+                        new NotFoundException("Заказ не найден")
+                );
 
         return toDto(order);
     }

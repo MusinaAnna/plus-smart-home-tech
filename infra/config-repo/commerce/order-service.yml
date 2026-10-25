@@ -10,3 +10,41 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
+
+      client:
+        config:
+          default:
+            connectTimeout: 2000
+            readTimeout: 3000
+
+          inventory-service:
+            connectTimeout: 1000
+            readTimeout: 2000
+            loggerLevel: basic
+
+logging:
+  level:
+    ru.yandex.practicum.order.feign.InventoryClient: DEBUG
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 5
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        ignore-exceptions:
+          - 'feign.FeignException$NotFound'
+          - 'feign.FeignException$Conflict'
+
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 3s
