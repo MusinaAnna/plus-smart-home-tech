@@ -1,13 +1,20 @@
 package ru.yandex.practicum.gateway.security;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 
 import java.util.ArrayList;
 import java.util.List;
 
+@Validated
 @ConfigurationProperties(prefix = "app.security")
 public class GatewaySecurityProperties {
 
+    @Valid
+    @NotEmpty
     private List<SecurityUser> users = new ArrayList<>();
 
     public List<SecurityUser> getUsers() {
@@ -20,9 +27,14 @@ public class GatewaySecurityProperties {
 
     public static class SecurityUser {
 
+        @NotBlank
         private String username;
+
+        @NotBlank
         private String password;
-        private List<String> roles = new ArrayList<>();
+
+        @NotEmpty
+        private List<@NotBlank String> roles = new ArrayList<>();
 
         public String getUsername() {
             return username;

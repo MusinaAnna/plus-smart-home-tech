@@ -25,6 +25,12 @@ import java.util.List;
 @EnableConfigurationProperties(GatewaySecurityProperties.class)
 public class GatewaySecurityConfig {
 
+    private static final String[] RESOURCE_PATHS = {
+            "/api/products", "/api/products/**",
+            "/api/categories", "/api/categories/**",
+            "/api/inventory", "/api/inventory/**"
+    };
+
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         return http
@@ -44,11 +50,7 @@ public class GatewaySecurityConfig {
                                 "/v3/api-docs/**",
                                 "/webjars/**"
                         ).permitAll()
-                        .pathMatchers(HttpMethod.GET,
-                                "/api/products", "/api/products/**",
-                                "/api/categories", "/api/categories/**",
-                                "/api/inventory", "/api/inventory/**"
-                        ).permitAll()
+                        .pathMatchers(HttpMethod.GET, RESOURCE_PATHS).permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/orders", "/api/orders/**")
                         .hasRole("USER")
                         .pathMatchers(HttpMethod.GET, "/api/orders/by-email")
@@ -57,26 +59,10 @@ public class GatewaySecurityConfig {
                         .hasRole("ADMIN")
                         .pathMatchers(HttpMethod.GET, "/api/orders/{id}")
                         .hasRole("USER")
-                        .pathMatchers(HttpMethod.POST,
-                                "/api/products", "/api/products/**",
-                                "/api/categories", "/api/categories/**",
-                                "/api/inventory", "/api/inventory/**"
-                        ).hasRole("ADMIN")
-                        .pathMatchers(HttpMethod.PUT,
-                                "/api/products", "/api/products/**",
-                                "/api/categories", "/api/categories/**",
-                                "/api/inventory", "/api/inventory/**"
-                        ).hasRole("ADMIN")
-                        .pathMatchers(HttpMethod.PATCH,
-                                "/api/products", "/api/products/**",
-                                "/api/categories", "/api/categories/**",
-                                "/api/inventory", "/api/inventory/**"
-                        ).hasRole("ADMIN")
-                        .pathMatchers(HttpMethod.DELETE,
-                                "/api/products", "/api/products/**",
-                                "/api/categories", "/api/categories/**",
-                                "/api/inventory", "/api/inventory/**"
-                        ).hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.POST, RESOURCE_PATHS).hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.PUT, RESOURCE_PATHS).hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.PATCH, RESOURCE_PATHS).hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.DELETE, RESOURCE_PATHS).hasRole("ADMIN")
                         .anyExchange().denyAll()
                 )
                 .build();
@@ -100,22 +86,11 @@ public class GatewaySecurityConfig {
             GatewaySecurityProperties properties,
             PasswordEncoder passwordEncoder
     ) {
-        if (properties.getUsers() == null || properties.getUsers().isEmpty()) {
-            throw new IllegalStateException("Gateway users are missing in app.security.users");
-        }
-
         List<UserDetails> users = properties.getUsers().stream()
-                .map(user -> {
-                    if (user.getUsername() == null || user.getUsername().isBlank()
-                            || user.getPassword() == null || user.getPassword().isBlank()
-                            || user.getRoles() == null || user.getRoles().isEmpty()) {
-                        throw new IllegalStateException("Invalid Gateway user in app.security.users");
-                    }
-                    return User.withUsername(user.getUsername())
-                            .password(passwordEncoder.encode(user.getPassword()))
-                            .roles(user.getRoles().toArray(String[]::new))
-                            .build();
-                })
+                .map(user -> User.withUsername(user.getUsername())
+                        .password(passwordEncoder.encode(user.getPassword()))
+                        .roles(user.getRoles().toArray(String[]::new))
+                        .build())
                 .toList();
 
         return new MapReactiveUserDetailsService(users);
